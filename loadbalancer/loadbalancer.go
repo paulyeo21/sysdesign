@@ -22,15 +22,17 @@ func newHandler(ref string) *handler {
 type loadBalancer struct {
 	handlers      []*handler
 	latestHandler int
+	strategy      strategy
 }
 
-func newLoadBalancer() *loadBalancer {
-	hA := newHandler("http://localhost:3000")
-	hB := newHandler("http://localhost:3001")
-	hC := newHandler("http://localhost:3002")
-
+func newLoadBalancer(s strategy) *loadBalancer {
 	return &loadBalancer{
-		handlers: []*handler{hA, hB, hC},
+		handlers: []*handler{
+			newHandler("http://localhost:3000"),
+			newHandler("http://localhost:3001"),
+			newHandler("http://localhost:3002"),
+		},
+		strategy: s,
 	}
 }
 
@@ -40,14 +42,12 @@ func (lb *loadBalancer) handleFunc(w http.ResponseWriter, r *http.Request) {
 	rp.ServeHTTP(w, r)
 }
 
-// round robin
 func (lb *loadBalancer) nextHandler() *handler {
-	lb.latestHandler++
-	return lb.handlers[lb.latestHandler%len(lb.handlers)]
+	return lb.strategy.nextHandler(lb)
 }
 
 func main() {
-	lb := newLoadBalancer()
+	lb := newLoadBalancer(roundRobin{})
 	http.HandleFunc("/", lb.handleFunc)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
