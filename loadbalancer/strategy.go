@@ -1,12 +1,15 @@
 package main
 
 import (
+	"fmt"
+	"math"
 	"math/rand"
 	"net/http"
 )
 
 type strategy interface {
 	nextHandler(r *http.Request) *handler
+	afterResponse(h *handler)
 }
 
 type roundRobin struct {
@@ -19,11 +22,7 @@ func (s *roundRobin) nextHandler(r *http.Request) *handler {
 	return s.handlers[s.last%len(s.handlers)]
 }
 
-// type weightedRoundRobin struct{}
-
-// func (s weightedRoundRobin) nextHandler(r *http.Request) *handler {
-// 	// not implemented
-// }
+func (s roundRobin) afterResponse(h *handler) {}
 
 type random struct {
 	handlers []*handler
@@ -33,7 +32,50 @@ func (s random) nextHandler(r *http.Request) *handler {
 	return s.handlers[rand.Intn(len(s.handlers))]
 }
 
-// type leastLoaded struct{}
+func (s random) afterResponse(h *handler) {}
+
+type leastConn struct {
+	handlers map[*handler]int
+}
+
+func newLeastConn(handlers []*handler) *leastConn {
+	hs := map[*handler]int{}
+
+	for i := range handlers {
+		hs[handlers[i]] = 0
+	}
+
+	return &leastConn{
+		handlers: hs,
+	}
+}
+
+func (s *leastConn) nextHandler(r *http.Request) *handler {
+	var res *handler
+	min := math.MaxInt32
+
+	for k, v := range s.handlers {
+		if v < min {
+			res = k
+			min = v
+		}
+	}
+
+	s.handlers[res]++
+
+	fmt.Printf("%v\n", s.handlers)
+	return res
+}
+
+func (s *leastConn) afterResponse(h *handler) {
+	s.handlers[h]--
+}
+
+// type weightedRoundRobin struct{}
+
+// func (s weightedRoundRobin) nextHandler(r *http.Request) *handler {
+// 	// not implemented
+// }
 
 // type simpleHashing struct{}
 
