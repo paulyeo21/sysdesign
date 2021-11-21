@@ -15,6 +15,7 @@
 `./server 3002 &`
 
 `curl -i localhost:8080` multiple times
+
 `curl -i localhost:8080 & curl -i localhost:8080` to run in parallel
 
 # Round Robin
