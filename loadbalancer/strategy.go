@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"net/http"
+	"sync"
 )
 
 type strategy interface {
@@ -35,6 +35,7 @@ func (s random) nextHandler(r *http.Request) *handler {
 func (s random) afterResponse(h *handler) {}
 
 type leastConn struct {
+	mu       sync.Mutex
 	handlers map[*handler]int
 }
 
@@ -54,6 +55,7 @@ func (s *leastConn) nextHandler(r *http.Request) *handler {
 	var res *handler
 	min := math.MaxInt32
 
+	s.mu.Lock()
 	for k, v := range s.handlers {
 		if v < min {
 			res = k
@@ -62,13 +64,15 @@ func (s *leastConn) nextHandler(r *http.Request) *handler {
 	}
 
 	s.handlers[res]++
+	s.mu.Unlock()
 
-	fmt.Printf("%v\n", s.handlers)
 	return res
 }
 
 func (s *leastConn) afterResponse(h *handler) {
+	s.mu.Lock()
 	s.handlers[h]--
+	s.mu.Unlock()
 }
 
 // type weightedRoundRobin struct{}
