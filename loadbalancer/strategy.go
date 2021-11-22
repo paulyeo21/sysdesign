@@ -15,10 +15,13 @@ type strategy interface {
 type roundRobin struct {
 	last     int
 	handlers []*handler
+	mu       sync.Mutex
 }
 
 func (s *roundRobin) nextHandler(r *http.Request) *handler {
-	s.last++
+	s.mu.Lock()
+	s.last = (s.last + 1) % len(s.handlers)
+	s.mu.Unlock()
 	return s.handlers[s.last%len(s.handlers)]
 }
 
@@ -75,11 +78,46 @@ func (s *leastConn) afterResponse(h *handler) {
 	s.mu.Unlock()
 }
 
-// type weightedRoundRobin struct{}
+type weightedRoundRobin struct {
+	hs []*handler
+	ws []int
+}
 
-// func (s weightedRoundRobin) nextHandler(r *http.Request) *handler {
-// 	// not implemented
-// }
+func newWeightedRoundRobin(handlers []*handler) *weightedRoundRobin {
+	var sum int
+	weights := []int{}
+
+	for i := range handlers {
+		sum += handlers[i].weight
+		weights = append(weights, sum)
+	}
+
+	return &weightedRoundRobin{
+		hs: handlers,
+		ws: weights,
+	}
+}
+
+func (s weightedRoundRobin) nextHandler(_ *http.Request) *handler {
+	randInt := rand.Intn(s.ws[len(s.ws)-1] + 1) // rand.Intn is [0, n)
+
+	var mid int
+	l, r := 0, len(s.ws)-1
+
+	for l < r {
+		mid = l + (r-l)/2
+
+		if randInt <= s.ws[mid] {
+			r = mid
+		} else {
+			l = mid + 1
+		}
+	}
+
+	return s.hs[l]
+}
+
+func (s weightedRoundRobin) afterResponse(h *handler) {}
 
 // type simpleHashing struct{}
 

@@ -3,14 +3,21 @@ package main
 import "net/url"
 
 type handler struct {
-	conns int
-	url   *url.URL
+	conns  int
+	url    *url.URL
+	weight int
 }
 
-func newHandler(ref string) *handler {
-	u, _ := url.Parse(ref)
+type handlerOpts struct {
+	ref    string
+	weight int
+}
+
+func newHandler(opts *handlerOpts) *handler {
+	u, _ := url.Parse(opts.ref)
 
 	return &handler{
-		url: u,
+		url:    u,
+		weight: opts.weight,
 	}
 }
