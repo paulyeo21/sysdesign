@@ -18,6 +18,8 @@
 
 `curl -w "\n" localhost:8080 & curl -w "\n" localhost:8080 & curl -w "\n" localhost:8080` to run in parallel
 
+`curl --header "UserID: 1" localhost:8080`
+
 # Round Robin
 
 ```golang
@@ -82,6 +84,21 @@ lb := newLoadBalancer(
 		}),
 	}),
 )
+
+http.HandleFunc("/", lb.handleFunc)
+log.Fatal(http.ListenAndServe(":8080", nil))
+```
+
+# Simple Hashing
+
+```golang
+lb := newLoadBalancer(simpleHashing{
+  hs: []*handler{
+    newHandler(&handlerOpts{ref: "http://localhost:3000"}),
+    newHandler(&handlerOpts{ref: "http://localhost:3001"}),
+    newHandler(&handlerOpts{ref: "http://localhost:3002"}),
+  },
+})
 
 http.HandleFunc("/", lb.handleFunc)
 log.Fatal(http.ListenAndServe(":8080", nil))

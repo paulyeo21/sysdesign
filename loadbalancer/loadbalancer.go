@@ -50,22 +50,22 @@ func main() {
 	// 	},
 	// )
 
-	lb := newLoadBalancer(
-		newWeightedRoundRobin([]*handler{
-			newHandler(&handlerOpts{
-				ref:    "http://localhost:3000",
-				weight: 3,
-			}),
-			newHandler(&handlerOpts{
-				ref:    "http://localhost:3001",
-				weight: 1,
-			}),
-			newHandler(&handlerOpts{
-				ref:    "http://localhost:3002",
-				weight: 1,
-			}),
-		}),
-	)
+	// lb := newLoadBalancer(
+	// 	newWeightedRoundRobin([]*handler{
+	// 		newHandler(&handlerOpts{
+	// 			ref:    "http://localhost:3000",
+	// 			weight: 3,
+	// 		}),
+	// 		newHandler(&handlerOpts{
+	// 			ref:    "http://localhost:3001",
+	// 			weight: 1,
+	// 		}),
+	// 		newHandler(&handlerOpts{
+	// 			ref:    "http://localhost:3002",
+	// 			weight: 1,
+	// 		}),
+	// 	}),
+	// )
 
 	// lb := newLoadBalancer(
 	// 	newLeastConn([]*handler{
@@ -74,6 +74,14 @@ func main() {
 	// 		newHandler("http://localhost:3002"),
 	// 	}),
 	// )
+
+	lb := newLoadBalancer(simpleHashing{
+		hs: []*handler{
+			newHandler(&handlerOpts{ref: "http://localhost:3000"}),
+			newHandler(&handlerOpts{ref: "http://localhost:3001"}),
+			newHandler(&handlerOpts{ref: "http://localhost:3002"}),
+		},
+	})
 
 	http.HandleFunc("/", makeHandler(lb.handleFunc))
 	log.Fatal(http.ListenAndServe(":8080", nil))

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"hash/fnv"
 	"math"
 	"math/rand"
 	"net/http"
@@ -31,7 +32,7 @@ type random struct {
 	handlers []*handler
 }
 
-func (s random) nextHandler(r *http.Request) *handler {
+func (s random) nextHandler(_ *http.Request) *handler {
 	return s.handlers[rand.Intn(len(s.handlers))]
 }
 
@@ -54,7 +55,7 @@ func newLeastConn(handlers []*handler) *leastConn {
 	}
 }
 
-func (s *leastConn) nextHandler(r *http.Request) *handler {
+func (s *leastConn) nextHandler(_ *http.Request) *handler {
 	var res *handler
 	min := math.MaxInt32
 
@@ -119,11 +120,20 @@ func (s weightedRoundRobin) nextHandler(_ *http.Request) *handler {
 
 func (s weightedRoundRobin) afterResponse(h *handler) {}
 
-// type simpleHashing struct{}
+type simpleHashing struct {
+	hs []*handler
+}
 
-// func (s simpleHashing) nextHandler(r *http.Request) *handler {
-// 	userID := []byte(r.Header.Get("UserID"))
-// 	i := int64(md5.Sum(userID))
-// 	fmt.Printf("%d\n", i)
-// 	return lb.handlers[i%len(lb.handlers)]
-// }
+func (s simpleHashing) hash(userID string) int {
+	// https://stackoverflow.com/questions/13582519/how-to-generate-hash-number-of-a-string-in-go
+	// https://pkg.go.dev/hash/fnv@go1.17.3
+	h := fnv.New32()
+	h.Write([]byte(userID))
+	return int(h.Sum32())
+}
+
+func (s simpleHashing) nextHandler(r *http.Request) *handler {
+	return s.hs[s.hash(r.Header.Get("UserID"))%len(s.hs)]
+}
+
+func (s simpleHashing) afterResponse(h *handler) {}
