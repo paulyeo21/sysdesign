@@ -20,6 +20,10 @@
 
 `curl --header "UserID: 1" localhost:8080`
 
+`curl -X POST -d '{"name":"node4","ref":"http://localhost:3003"}' localhost:8080/add`
+
+`curl localhost:8080/report`
+
 # Round Robin
 
 ```golang
@@ -102,4 +106,39 @@ lb := newLoadBalancer(simpleHashing{
 
 http.HandleFunc("/", lb.handleFunc)
 log.Fatal(http.ListenAndServe(":8080", nil))
+```
+
+# Consistent Hashing
+
+```golang
+h1, err := newHandler(&handlerOpts{
+  Name: "node1",
+  Ref:  "http://localhost:3000",
+})
+if err != nil {
+  log.Fatal(err)
+}
+
+h2, err := newHandler(&handlerOpts{
+  Name: "node2",
+  Ref:  "http://localhost:3001",
+})
+if err != nil {
+  log.Fatal(err)
+}
+
+h3, err := newHandler(&handlerOpts{
+  Name: "node3",
+  Ref:  "http://localhost:3002",
+})
+if err != nil {
+  log.Fatal(err)
+}
+
+lb := newLoadBalancer(newConsistentHashing(
+  &consistentHashingOpts{
+    handlers:    []*handler{h1, h2, h3},
+    numReplicas: 2,
+  },
+))
 ```

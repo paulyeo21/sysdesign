@@ -14,6 +14,7 @@ type strategy interface {
 	add(handlers ...*handler)
 	afterResponse(h *handler, r *http.Request)
 	nextHandler(r *http.Request) *handler
+	report() string
 }
 
 type roundRobin struct {
@@ -24,6 +25,7 @@ type roundRobin struct {
 
 func (s roundRobin) add(handlers ...*handler)                  {}
 func (s roundRobin) afterResponse(h *handler, r *http.Request) {}
+func (s roundRobin) report() string                            { return "" }
 func (s *roundRobin) nextHandler(r *http.Request) *handler {
 	s.mu.Lock()
 	s.last = (s.last + 1) % len(s.handlers)
@@ -37,6 +39,7 @@ type random struct {
 
 func (s random) add(handlers []*handler)                   {}
 func (s random) afterResponse(h *handler, r *http.Request) {}
+func (s random) report() string                            { return "" }
 func (s random) nextHandler(_ *http.Request) *handler {
 	return s.handlers[rand.Intn(len(s.handlers))]
 }
@@ -84,6 +87,8 @@ func (s *leastConn) nextHandler(_ *http.Request) *handler {
 	return res
 }
 
+func (s leastConn) report() string { return "" }
+
 type weightedRoundRobin struct {
 	hs []*handler
 	ws []int
@@ -106,6 +111,7 @@ func newWeightedRoundRobin(handlers []*handler) *weightedRoundRobin {
 
 func (s weightedRoundRobin) add(handlers ...*handler)                  {}
 func (s weightedRoundRobin) afterResponse(h *handler, r *http.Request) {}
+func (s weightedRoundRobin) report() string                            { return "" }
 func (s weightedRoundRobin) nextHandler(_ *http.Request) *handler {
 	randInt := rand.Intn(s.ws[len(s.ws)-1] + 1) // rand.Intn is [0, n)
 
@@ -131,13 +137,14 @@ type simpleHashing struct {
 
 func (s simpleHashing) add(handlers ...*handler)                  {}
 func (s simpleHashing) afterResponse(h *handler, r *http.Request) {}
+func (s simpleHashing) report() string                            { return "" }
 func (s simpleHashing) nextHandler(r *http.Request) *handler {
 	return s.handlers[hash(r.Header.Get("UserID"))%len(s.handlers)]
 }
 
 type consistentHashing struct {
 	handlers    map[int]*handler
-	logs        []string
+	logs        map[string]string
 	numReplicas int
 	partitions  []int
 }
@@ -150,6 +157,7 @@ type consistentHashingOpts struct {
 func newConsistentHashing(opts *consistentHashingOpts) *consistentHashing {
 	h := &consistentHashing{
 		handlers:    map[int]*handler{},
+		logs:        map[string]string{},
 		numReplicas: opts.numReplicas,
 		partitions:  []int{},
 	}
@@ -171,13 +179,15 @@ func (s *consistentHashing) add(handlers ...*handler) {
 	sort.Ints(s.partitions)
 }
 
-func (s consistentHashing) afterResponse(h *handler, r *http.Request) {
-	s.logs = append(s.logs, r.Header.Get("UserID"))
+func (s *consistentHashing) afterResponse(h *handler, r *http.Request) {
+	userID := r.Header.Get("UserID")
+
+	if userID != "" {
+		s.logs[userID] = ""
+	}
 }
 
-func (s consistentHashing) nextHandler(r *http.Request) *handler {
-	hash := hash(r.Header.Get("UserID"))
-
+func (s consistentHashing) findHandler(hash int) *handler {
 	idx := sort.Search(len(s.handlers), func(i int) bool {
 		return hash < s.partitions[i]
 	})
@@ -187,6 +197,28 @@ func (s consistentHashing) nextHandler(r *http.Request) *handler {
 	}
 
 	return s.handlers[s.partitions[idx]]
+}
+
+func (s consistentHashing) nextHandler(r *http.Request) *handler {
+	h := hash(r.Header.Get("UserID"))
+
+	return s.findHandler(h)
+}
+
+func (s consistentHashing) report() string {
+	var res string
+	hosts := map[string][]string{}
+
+	for userID := range s.logs {
+		handler := s.findHandler(hash(userID))
+		hosts[handler.url.Host] = append(hosts[handler.url.Host], userID)
+	}
+
+	for host, userID := range hosts {
+		res += fmt.Sprintf("%s -> %s\n", host, userID)
+	}
+
+	return res
 }
 
 func hash(userID string) int {
